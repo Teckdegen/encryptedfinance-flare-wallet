@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useAccount } from "wagmi";
 import { FileCheck2, Loader2, Copy, Check, ShieldCheck, ScrollText, Landmark, Search, BadgeCheck, XCircle, Clock } from "lucide-react";
+import { ethers } from "ethers";
 import { EfiState } from "../lib/efi/useEfi";
 import { DisclosureResult } from "../lib/efi/client";
 import { decryptProofId } from "../lib/efi/crypto";
@@ -60,7 +61,10 @@ function Prove({ efi }: { efi: EfiState }) {
       const to = recipient.trim() || "0x000000000000000000000000000000000000dEaD";
       let res;
       if (kind === "solvency") {
-        const thr = BigInt(Math.floor(Number(threshold) * 10 ** token.decimals));
+        // parseUnits keeps full precision — the old float math (Number * 10**dec)
+        // overflowed JS's safe-integer range for 18-decimal tokens and produced a
+        // wrong threshold, so solvency only worked for low-decimal tokens (GHST).
+        const thr = ethers.parseUnits((threshold || "0").trim(), token.decimals);
         res = await efi.client.discloseSolvency(to, token.address, thr, notes);
       } else if (kind === "compliance") {
         res = await efi.client.discloseCompliance(to, jurisdiction.trim() || "US", notes);
