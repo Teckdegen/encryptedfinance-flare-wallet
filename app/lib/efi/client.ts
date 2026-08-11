@@ -518,7 +518,19 @@ export class EfiClient {
             vault.isSpent(n.noteId) as Promise<boolean>,
             vault.noteCommitment(n.noteId) as Promise<string>,
           ]);
-          return !spent && commit !== ethers.ZeroHash;
+          if (spent || commit === ethers.ZeroHash) return false;
+          // The decrypted (amount, token, salt) MUST reproduce the on-chain
+          // commitment. If it doesn't, the note is unspendable — any transfer,
+          // swap, or disclosure recomputes this hash and the vault/TEE rejects it
+          // ("commitment mismatch"). Drop it so balance and proofs only ever use
+          // verifiable notes instead of crashing on one bad note.
+          const expected = ethers.keccak256(
+            ethers.AbiCoder.defaultAbiCoder().encode(
+              ["bytes32", "uint256", "address", "bytes32"],
+              [n.noteId, n.amount, n.token, n.salt],
+            ),
+          );
+          return expected.toLowerCase() === commit.toLowerCase();
         } catch {
           return false;
         }
