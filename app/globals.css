@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #000000;
+  --panel: #16140f;
+  --ink: #ECE3D0;        /* cream */
+  --cream: #ECE3D0;
+  --muted: #8f887a;
+  --success: #7ED9A0;
+  --danger: #F06A6A;
+}
+
+html, body {
+  background: #000000;
+  color: var(--ink);
+  font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+* { box-sizing: border-box; }
+
+/* Warm cream glow bleeding from the corners — ties the black to the brand cream. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  background:
+    radial-gradient(520px circle at 10% 2%, rgba(236, 227, 208, 0.09), transparent 55%),
+    radial-gradient(620px circle at 92% 100%, rgba(236, 227, 208, 0.05), transparent 55%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Warm near-black card. */
+.glass {
+  background: #121110;
+  border: 1px solid rgba(236, 227, 208, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 2px 16px 0 rgba(0, 0, 0, 0.6);
+  position: relative;
+}
+
+/* Slightly raised warm-dark card (inputs, tiles, active states). */
+.glass-strong {
+  background: #1b1813;
+  border: 1px solid rgba(236, 227, 208, 0.10);
+  border-radius: 20px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+/* Primary CTA — cream on black (the logo, inverted). */
+.glass-btn {
+  background: var(--cream);
+  color: #0a0a0a;
+  border: 1px solid var(--cream);
+  box-shadow: 0 4px 20px 0 rgba(236, 227, 208, 0.12);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: #F3ECDD;
+  box-shadow: 0 8px 26px 0 rgba(236, 227, 208, 0.2);
+}
+
+.glass-btn:active:not(:disabled) { transform: translateY(0); }
+.glass-btn:disabled { opacity: 0.32; cursor: not-allowed; }
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { scrollbar-width: none; }
+
+input, select, textarea {
+  -webkit-appearance: none;
+  appearance: none;
+  font-family: inherit;
+  color: var(--ink);
+  background-color: transparent;
+}
+input::placeholder, textarea::placeholder { color: #6b6558; }
+select option { background: #16140f; color: var(--ink); }
+
+button, select { cursor: pointer; }
+
+@keyframes pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.animate-pop { animation: pop 0.42s cubic-bezier(0.22, 1, 0.36, 1); }
+
+@keyframes slideUp {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-up { animation: slideUp 0.28s ease-out; }
