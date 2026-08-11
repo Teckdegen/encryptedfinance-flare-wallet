@@ -12,6 +12,12 @@ import { ethers } from "ethers";
 export const NOTE_BYTES = 221;
 const PLAIN_BYTES = 128;
 
+// Newer TS DOM libs type WebCrypto's BufferSource params against ArrayBuffer-
+// backed views, but ethers.getBytes()/.slice() yield Uint8Array<ArrayBufferLike>.
+// These are valid BufferSources at runtime; normalize the type so `next build`
+// (strict type-check) accepts them.
+const bs = (u: Uint8Array): BufferSource => u as BufferSource;
+
 function encodePlain(owner: string, amount: bigint, token: string, salt: string): Uint8Array {
   const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
     ["address", "uint256", "address", "bytes32"],
@@ -23,7 +29,7 @@ function encodePlain(owner: string, amount: bigint, token: string, salt: string)
 }
 
 async function aesKey(sharedX: Uint8Array): Promise<CryptoKey> {
-  const hash = await crypto.subtle.digest("SHA-256", sharedX);
+  const hash = await crypto.subtle.digest("SHA-256", bs(sharedX));
   return crypto.subtle.importKey("raw", hash, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
 
@@ -43,7 +49,7 @@ export async function encryptNote221(
   const key = await aesKey(sharedX);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ctWithTag = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv, tagLength: 128 }, key, plain),
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: bs(iv), tagLength: 128 }, key, bs(plain)),
   );
   const ciphertext = ctWithTag.slice(0, PLAIN_BYTES);
   const tag = ctWithTag.slice(PLAIN_BYTES);
@@ -72,7 +78,7 @@ export async function decryptNote221(
   ctWithTag.set(ciphertext, 0);
   ctWithTag.set(tag, ciphertext.length);
   const plain = new Uint8Array(
-    await crypto.subtle.decrypt({ name: "AES-GCM", iv, tagLength: 128 }, key, ctWithTag),
+    await crypto.subtle.decrypt({ name: "AES-GCM", iv: bs(iv), tagLength: 128 }, key, bs(ctWithTag)),
   );
   const decoded = ethers.AbiCoder.defaultAbiCoder().decode(
     ["address", "uint256", "address", "bytes32"],
