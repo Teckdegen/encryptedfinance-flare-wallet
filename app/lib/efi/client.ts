@@ -358,20 +358,44 @@ export class EfiClient {
     );
   }
 
+  // Keep only notes whose decrypted (amount, token, salt) reproduces the on-chain
+  // commitment. The balance/list can still show every note, but a PROOF must never
+  // include an unverifiable one — the TEE recomputes the hash and aborts the whole
+  // proof ("commitment mismatch"). This drops just the bad note, not the wallet.
+  private async verifiableNotes(notes: PrivateNote[]): Promise<PrivateNote[]> {
+    const vault = await this.vault();
+    const oks = await Promise.all(
+      notes.map(async (n) => {
+        try {
+          const commit = (await vault.noteCommitment(n.noteId)) as string;
+          const expected = noteCommitment(n.noteId, n.amount, n.token, n.salt);
+          return expected.toLowerCase() === commit.toLowerCase();
+        } catch {
+          return false;
+        }
+      }),
+    );
+    return notes.filter((_, i) => oks[i]);
+  }
+
   // ── SELECTIVE DISCLOSURE: prove solvency ≥ threshold ──
   async discloseSolvency(recipient: string, token: string, threshold: bigint, notes: PrivateNote[], expiresInSec = 3600) {
     const expiresAt = BigInt(Math.floor(Date.now() / 1000) + expiresInSec);
+    const vnotes = await this.verifiableNotes(notes);
+    if (vnotes.length === 0) throw new Error("None of your notes could be verified against chain. Re-shield and try again.");
     return this.directHandle(
       "DISCLOSE", "SOLVENCY",
       ["address", "uint256", "address", "uint256", "bytes32[]", "uint256[]", "bytes32[]"],
-      [recipient, expiresAt, token, threshold, notes.map((n) => n.noteId), notes.map((n) => n.amount), notes.map((n) => n.salt)],
+      [recipient, expiresAt, token, threshold, vnotes.map((n) => n.noteId), vnotes.map((n) => n.amount), vnotes.map((n) => n.salt)],
     );
   }
 
   // ── SELECTIVE DISCLOSURE: regulator/compliance attestation over a jurisdiction ──
   async discloseCompliance(recipient: string, jurisdiction: string, notes: PrivateNote[], expiresInSec = 3600) {
     const expiresAt = BigInt(Math.floor(Date.now() / 1000) + expiresInSec);
-    const commitments = notes.map((n) => noteCommitment(n.noteId, n.amount, n.token, n.salt));
+    const vnotes = await this.verifiableNotes(notes);
+    if (vnotes.length === 0) throw new Error("None of your notes could be verified against chain. Re-shield and try again.");
+    const commitments = vnotes.map((n) => noteCommitment(n.noteId, n.amount, n.token, n.salt));
     return this.directHandle(
       "DISCLOSE", "COMPLIANCE",
       ["address", "uint256", "string", "bytes32[]"],
@@ -382,7 +406,9 @@ export class EfiClient {
   // ── SELECTIVE DISCLOSURE: signed audit trail of specific notes ──
   async discloseAuditTrail(recipient: string, notes: PrivateNote[], expiresInSec = 3600) {
     const expiresAt = BigInt(Math.floor(Date.now() / 1000) + expiresInSec);
-    const entries = notes.map((n) => [n.noteId, n.amount, n.token, n.salt, 0]);
+    const vnotes = await this.verifiableNotes(notes);
+    if (vnotes.length === 0) throw new Error("None of your notes could be verified against chain. Re-shield and try again.");
+    const entries = vnotes.map((n) => [n.noteId, n.amount, n.token, n.salt, 0]);
     return this.directHandle(
       "DISCLOSE", "AUDIT_TRAIL",
       ["address", "uint256", "tuple(bytes32 noteId, uint256 amount, address token, bytes32 salt, uint8 kind)[]"],
@@ -518,19 +544,7 @@ export class EfiClient {
             vault.isSpent(n.noteId) as Promise<boolean>,
             vault.noteCommitment(n.noteId) as Promise<string>,
           ]);
-          if (spent || commit === ethers.ZeroHash) return false;
-          // The decrypted (amount, token, salt) MUST reproduce the on-chain
-          // commitment. If it doesn't, the note is unspendable — any transfer,
-          // swap, or disclosure recomputes this hash and the vault/TEE rejects it
-          // ("commitment mismatch"). Drop it so balance and proofs only ever use
-          // verifiable notes instead of crashing on one bad note.
-          const expected = ethers.keccak256(
-            ethers.AbiCoder.defaultAbiCoder().encode(
-              ["bytes32", "uint256", "address", "bytes32"],
-              [n.noteId, n.amount, n.token, n.salt],
-            ),
-          );
-          return expected.toLowerCase() === commit.toLowerCase();
+          return !spent && commit !== ethers.ZeroHash;
         } catch {
           return false;
         }
